@@ -1,5 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
+import { Topic } from "aws-cdk-lib/aws-sns";
+import { EmailSubscription } from "aws-cdk-lib/aws-sns-subscriptions";
 import { Construct } from "constructs";
 
 export class SoftuniAwsExamStack extends cdk.Stack {
@@ -17,6 +19,15 @@ export class SoftuniAwsExamStack extends cdk.Stack {
       indexName: "TagIndex",
       partitionKey: { name: "tag", type: AttributeType.STRING },
     });
+
+    // SNS topic
+    const thresholdReachedTopic = new Topic(this, "ThresholdReachedTopic", {
+      displayName: "ThresholdReachedTopic",
+    });
+    // TODO: Change email to: hristo.zhelev@yahoo.com.
+    thresholdReachedTopic.addSubscription(
+      new EmailSubscription("lyubomir555@gmail.com")
+    );
 
     // Outputs
     new cdk.CfnOutput(this, "TableArn", {
