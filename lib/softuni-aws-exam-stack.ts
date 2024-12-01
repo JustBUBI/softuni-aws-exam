@@ -34,9 +34,8 @@ export class SoftuniAwsExamStack extends cdk.Stack {
     const thresholdReachedTopic = new Topic(this, "ThresholdReachedTopic", {
       displayName: "ThresholdReachedTopic",
     });
-    // TODO: Change email to: hristo.zhelev@yahoo.com.
     thresholdReachedTopic.addSubscription(
-      new EmailSubscription("lyubomir555@gmail.com")
+      new EmailSubscription("hristo.zhelev@yahoo.com")
     );
 
     // CloudWatch Metric for the DynamoDB table's item count
