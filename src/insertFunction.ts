@@ -13,6 +13,37 @@ const snsClient = new SNSClient({ region });
 export const handler = async (event: any) => {
   console.log(event);
 
+  // Get the number of items in DynamoDB table
+  try {
+    const scanCommand = new ScanCommand({
+      TableName: process.env.TABLE_NAME,
+    });
+
+    const scanResult = await dynamoClient.send(scanCommand);
+
+    // Scan returns all items, count the length of Items array
+    const itemCount = scanResult.Items ? scanResult.Items.length : 0;
+
+    console.log(`Number of records in the table: ${itemCount}`);
+
+    if (itemCount >= 10) {
+      // Send email notification
+      try {
+        const snsCommand = new PublishCommand({
+          Message: `Currently, there are ${itemCount} items in the database. This is above the allowed threshold!`,
+          Subject: "Threshold for items in database reached!",
+          TopicArn: process.env.TOPIC_ARN,
+        });
+        await snsClient.send(snsCommand);
+        console.log(`Message sent to SNS.`);
+      } catch (err) {
+        console.error("Error triggering SNS:", err);
+      }
+    }
+  } catch (err) {
+    console.error("Error scanning DynamoDB:", err);
+  }
+
   const dynamoItemInput = {
     TableName: process.env.TABLE_NAME,
     Item: {
@@ -40,49 +71,8 @@ export const handler = async (event: any) => {
     console.error("Error writing to Dynamo:", err);
   }
 
-  // Get the number of items in DynamoDB table
-  try {
-    const scanCommand = new ScanCommand({
-      TableName: process.env.TABLE_NAME,
-    });
-
-    const scanResult = await dynamoClient.send(scanCommand);
-
-    // Scan returns all items, count the length of Items array
-    const itemCount = scanResult.Items ? scanResult.Items.length : 0;
-
-    console.log(`Number of records in the table: ${itemCount}`);
-
-    if (itemCount >= 10) {
-      // Send email notification
-      try {
-        const snsCommand = new PublishCommand({
-          Message: `Currently, there are ${itemCount} items in the database. This is above the allowed threshold!`,
-          Subject: "Threshold for items in database reached!",
-          TopicArn: process.env.TOPIC_ARN,
-        });
-        await snsClient.send(snsCommand);
-        console.log(`Message sent to SNS.`);
-      } catch (err) {
-        console.error("Error triggering SNS:", err);
-
-        return {
-          statusCode: 500,
-          body: "Failed to send SNS message.",
-        };
-      }
-    }
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ message: "Item stored in Dynamo.", itemCount }),
-    };
-  } catch (err) {
-    console.error("Error scanning DynamoDB:", err);
-
-    return {
-      statusCode: 500,
-      body: "Failed to retrieve item count from DynamoDB.",
-    };
-  }
+  return {
+    statusCode: 200,
+    body: "Request processed.",
+  };
 };
