@@ -6,11 +6,13 @@ import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import { ServicePrincipal } from "aws-cdk-lib/aws-iam";
-import { Runtime } from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Topic } from "aws-cdk-lib/aws-sns";
-import { EmailSubscription, LambdaSubscription } from "aws-cdk-lib/aws-sns-subscriptions";
+import {
+  EmailSubscription,
+  LambdaSubscription,
+} from "aws-cdk-lib/aws-sns-subscriptions";
 import { Construct } from "constructs";
+import { BaseFunction } from "./function";
 
 export class SoftuniAwsExamStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -56,27 +58,21 @@ export class SoftuniAwsExamStack extends cdk.Stack {
     alarm.addAlarmAction(new SnsAction(thresholdReachedTopic));
 
     // Lambda functions
-    const insertFunction = new NodejsFunction(this, "insertFunction", {
-      runtime: Runtime.NODEJS_20_X,
-      entry: `${__dirname}/../src/insertFunction.ts`,
-      handler: "handler",
+    const insertFunction = new BaseFunction(this, "insertFunction", {
+      functionFileName: "insertFunction.ts",
       environment: {
         TABLE_NAME: productTable.tableName,
         TOPIC_ARN: thresholdReachedTopic.topicArn,
       },
     });
-    const getProductFunction = new NodejsFunction(this, "getProductFunction", {
-      runtime: Runtime.NODEJS_20_X,
-      entry: `${__dirname}/../src/getProductFunction.ts`,
-      handler: "handler",
+    const getProductFunction = new BaseFunction(this, "getProductFunction", {
+      functionFileName: "getProductFunction.ts",
       environment: {
         TABLE_NAME: productTable.tableName,
       },
     });
-    const deleteFunction = new NodejsFunction(this, "deleteFunction", {
-      runtime: Runtime.NODEJS_20_X,
-      entry: `${__dirname}/../src/deleteFunction.ts`,
-      handler: "handler",
+    const deleteFunction = new BaseFunction(this, "deleteFunction", {
+      functionFileName: "deleteFunction.ts",
       environment: {
         TABLE_NAME: productTable.tableName,
       },
@@ -88,18 +84,19 @@ export class SoftuniAwsExamStack extends cdk.Stack {
     thresholdReachedTopic.grantPublish(insertFunction);
 
     // Create an SNS subscription to trigger the Lambda function
-    thresholdReachedTopic.addSubscription(new LambdaSubscription(deleteFunction));
+    thresholdReachedTopic.addSubscription(
+      new LambdaSubscription(deleteFunction)
+    );
 
     // Allow SNS to invoke the Lambda function
-    deleteFunction.addPermission('AllowSNSInvoke', {
-      principal: new ServicePrincipal('sns.amazonaws.com'),
+    deleteFunction.addPermission("AllowSNSInvoke", {
+      principal: new ServicePrincipal("sns.amazonaws.com"),
       sourceArn: thresholdReachedTopic.topicArn,
     });
 
     // EventBridge Rule to trigger the Lambda every 5 minutes
     new Rule(this, "ScheduleRule", {
-      // TODO: Change to 5
-      schedule: Schedule.rate(cdk.Duration.minutes(1)),
+      schedule: Schedule.rate(cdk.Duration.minutes(5)),
       targets: [new LambdaFunction(insertFunction)],
     });
 
