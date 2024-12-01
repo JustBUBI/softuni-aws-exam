@@ -355,7 +355,7 @@ exports[`Stack Created 1`] = `
     },
     "ScheduleRuleDA5BD877": {
       "Properties": {
-        "ScheduleExpression": "rate(1 minute)",
+        "ScheduleExpression": "rate(5 minutes)",
         "State": "ENABLED",
         "Targets": [
           {
@@ -377,9 +377,9 @@ exports[`Stack Created 1`] = `
       },
       "Type": "AWS::SNS::Topic",
     },
-    "ThresholdReachedTopiclyubomir555gmailcom9A08672B": {
+    "ThresholdReachedTopichristozhelevyahoocom274E2335": {
       "Properties": {
-        "Endpoint": "lyubomir555@gmail.com",
+        "Endpoint": "hristo.zhelev@yahoo.com",
         "Protocol": "email",
         "TopicArn": {
           "Ref": "ThresholdReachedTopic0F63CDA8",
