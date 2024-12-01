@@ -5,10 +5,11 @@ import { SnsAction } from "aws-cdk-lib/aws-cloudwatch-actions";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
+import { ServicePrincipal } from "aws-cdk-lib/aws-iam";
 import { Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Topic } from "aws-cdk-lib/aws-sns";
-import { EmailSubscription } from "aws-cdk-lib/aws-sns-subscriptions";
+import { EmailSubscription, LambdaSubscription } from "aws-cdk-lib/aws-sns-subscriptions";
 import { Construct } from "constructs";
 
 export class SoftuniAwsExamStack extends cdk.Stack {
@@ -61,6 +62,7 @@ export class SoftuniAwsExamStack extends cdk.Stack {
       handler: "handler",
       environment: {
         TABLE_NAME: productTable.tableName,
+        TOPIC_ARN: thresholdReachedTopic.topicArn,
       },
     });
     const getProductFunction = new NodejsFunction(this, "getProductFunction", {
@@ -71,13 +73,33 @@ export class SoftuniAwsExamStack extends cdk.Stack {
         TABLE_NAME: productTable.tableName,
       },
     });
+    const deleteFunction = new NodejsFunction(this, "deleteFunction", {
+      runtime: Runtime.NODEJS_20_X,
+      entry: `${__dirname}/../src/deleteFunction.ts`,
+      handler: "handler",
+      environment: {
+        TABLE_NAME: productTable.tableName,
+      },
+    });
     // Grant lambdas permissions
-    productTable.grantWriteData(insertFunction);
+    productTable.grantReadWriteData(insertFunction);
     productTable.grantReadData(getProductFunction);
+    productTable.grantReadWriteData(deleteFunction);
+    thresholdReachedTopic.grantPublish(insertFunction);
+
+    // Create an SNS subscription to trigger the Lambda function
+    thresholdReachedTopic.addSubscription(new LambdaSubscription(deleteFunction));
+
+    // Allow SNS to invoke the Lambda function
+    deleteFunction.addPermission('AllowSNSInvoke', {
+      principal: new ServicePrincipal('sns.amazonaws.com'),
+      sourceArn: thresholdReachedTopic.topicArn,
+    });
 
     // EventBridge Rule to trigger the Lambda every 5 minutes
     new Rule(this, "ScheduleRule", {
-      schedule: Schedule.rate(cdk.Duration.minutes(5)),
+      // TODO: Change to 5
+      schedule: Schedule.rate(cdk.Duration.minutes(1)),
       targets: [new LambdaFunction(insertFunction)],
     });
 
