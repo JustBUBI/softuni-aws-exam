@@ -1,0 +1,85 @@
+name: GitHub Action Main Branch
+run-name: "${{github.actor}} performed ${{github.event_name}} on ${{github.head_ref || github.ref_name}}"
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run build
+        run: npm run build
+
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm run test
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: eu-central-1
+          aws-access-key-id: ${{secrets.AWS_ACCESS_KEY}}
+          aws-secret-access-key: ${{secrets.AWS_ACCESS_SECRET}}
+
+      - name: Delete all items in DynamoDB table
+        run: |
+          echo "Deleting all items from DynamoDB table"
+          TABLE_NAME="ProductTable"
+          aws dynamodb scan --table-name $TABLE_NAME --query "Items[].productId.S" --output text | tr '\t' '\n' | while read item_id; do
+            echo "Deleting item with productId: $item_id"
+            aws dynamodb delete-item --table-name $TABLE_NAME --key '{"productId": {"S": "'$item_id'"}}'
+          done
+          echo "All items deleted from DynamoDB table."
+
+      - name: Synth CDK stack
+        run: |
+          npx cdk synth > cdk_synth.yaml
+          echo "Synth output successful."
+
+      - name: Deploy CDK stack
+        run: |
+          npx cdk deploy --require-approval never
+          echo "Deployed successfully."
