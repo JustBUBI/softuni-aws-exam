@@ -1,8 +1,14 @@
-import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
+import {
+  DynamoDBClient,
+  PutItemCommand,
+  ScanCommand,
+} from "@aws-sdk/client-dynamodb";
+import { PublishCommand, SNSClient } from "@aws-sdk/client-sns";
 import { randomUUID } from "crypto";
 
 const region = "eu-central-1";
 const dynamoClient = new DynamoDBClient({ region });
+const snsClient = new SNSClient({ region });
 
 export const handler = async (event: any) => {
   console.log(event);
@@ -34,8 +40,49 @@ export const handler = async (event: any) => {
     console.error("Error writing to Dynamo:", err);
   }
 
-  return {
-    statusCode: 200,
-    body: "Item stored in Dynamo.",
-  };
+  // Get the number of items in DynamoDB table
+  try {
+    const scanCommand = new ScanCommand({
+      TableName: process.env.TABLE_NAME,
+    });
+
+    const scanResult = await dynamoClient.send(scanCommand);
+
+    // Scan returns all items, count the length of Items array
+    const itemCount = scanResult.Items ? scanResult.Items.length : 0;
+
+    console.log(`Number of records in the table: ${itemCount}`);
+
+    if (itemCount >= 10) {
+      // Send email notification
+      try {
+        const snsCommand = new PublishCommand({
+          Message: `Currently, there are ${itemCount} items in the database. This is above the allowed threshold!`,
+          Subject: "Threshold for items in database reached!",
+          TopicArn: process.env.TOPIC_ARN,
+        });
+        await snsClient.send(snsCommand);
+        console.log(`Message sent to SNS.`);
+      } catch (err) {
+        console.error("Error triggering SNS:", err);
+
+        return {
+          statusCode: 500,
+          body: "Failed to send SNS message.",
+        };
+      }
+    }
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: "Item stored in Dynamo.", itemCount }),
+    };
+  } catch (err) {
+    console.error("Error scanning DynamoDB:", err);
+
+    return {
+      statusCode: 500,
+      body: "Failed to retrieve item count from DynamoDB.",
+    };
+  }
 };
