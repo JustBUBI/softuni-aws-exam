@@ -1,4 +1,5 @@
 import * as cdk from "aws-cdk-lib";
+import { LambdaIntegration, RestApi } from "aws-cdk-lib/aws-apigateway";
 import { Alarm, ComparisonOperator, Metric } from "aws-cdk-lib/aws-cloudwatch";
 import { SnsAction } from "aws-cdk-lib/aws-cloudwatch-actions";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
@@ -36,13 +37,13 @@ export class SoftuniAwsExamStack extends cdk.Stack {
     );
 
     // CloudWatch Metric for the DynamoDB table's item count
-    const itemCountMetric = productTable.metric('Table.ItemCount', {
-      statistic: 'Sum',
-      period: cdk.Duration.minutes(1)
+    const itemCountMetric = productTable.metric("Table.ItemCount", {
+      statistic: "Sum",
+      period: cdk.Duration.minutes(1),
     });
 
     // CloudWatch Alarm
-    const alarm = new Alarm(this, 'ItemCountAlarm', {
+    const alarm = new Alarm(this, "ItemCountAlarm", {
       metric: itemCountMetric,
       // TODO: Change to 10
       threshold: 2,
@@ -62,19 +63,36 @@ export class SoftuniAwsExamStack extends cdk.Stack {
         TABLE_NAME: productTable.tableName,
       },
     });
-    // Grant permissions to write to Dynamo
+    const getProductFunction = new NodejsFunction(this, "getProductFunction", {
+      runtime: Runtime.NODEJS_20_X,
+      entry: `${__dirname}/../src/getProductFunction.ts`,
+      handler: "handler",
+      environment: {
+        TABLE_NAME: productTable.tableName,
+      },
+    });
+    // Grant lambdas permissions
     productTable.grantWriteData(insertFunction);
+    productTable.grantReadData(getProductFunction);
 
     // EventBridge Rule to trigger the Lambda every 5 minutes
-    new Rule(this, 'ScheduleRule', {
+    new Rule(this, "ScheduleRule", {
       schedule: Schedule.rate(cdk.Duration.minutes(5)),
       targets: [new LambdaFunction(insertFunction)],
     });
+
+    // Api Gateway
+    const api = new RestApi(this, "ProductApi");
+    const resource = api.root.addResource("getProductById");
+    resource.addMethod("POST", new LambdaIntegration(getProductFunction));
 
     // Outputs
     new cdk.CfnOutput(this, "TableArn", {
       value: productTable.tableArn,
       description: "ARN of the DynamoDB Product Table",
+    });
+    new cdk.CfnOutput(this, "RestApiEndpoint", {
+      value: `https://${api.restApiId}.execute-api.eu-central-1.amazonaws.com/prod/getProductById`,
     });
   }
 }
