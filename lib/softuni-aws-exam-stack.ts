@@ -2,6 +2,10 @@ import * as cdk from "aws-cdk-lib";
 import { Alarm, ComparisonOperator, Metric } from "aws-cdk-lib/aws-cloudwatch";
 import { SnsAction } from "aws-cdk-lib/aws-cloudwatch-actions";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
+import { Rule, Schedule } from "aws-cdk-lib/aws-events";
+import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
+import { Runtime } from "aws-cdk-lib/aws-lambda";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Topic } from "aws-cdk-lib/aws-sns";
 import { EmailSubscription } from "aws-cdk-lib/aws-sns-subscriptions";
 import { Construct } from "constructs";
@@ -48,6 +52,24 @@ export class SoftuniAwsExamStack extends cdk.Stack {
 
     // Add SNS Topic as Alarm Action
     alarm.addAlarmAction(new SnsAction(thresholdReachedTopic));
+
+    // Lambda functions
+    const insertFunction = new NodejsFunction(this, "insertFunction", {
+      runtime: Runtime.NODEJS_20_X,
+      entry: `${__dirname}/../src/insertFunction.ts`,
+      handler: "handler",
+      environment: {
+        TABLE_NAME: productTable.tableName,
+      },
+    });
+    // Grant permissions to write to Dynamo
+    productTable.grantWriteData(insertFunction);
+
+    // EventBridge Rule to trigger the Lambda every 5 minutes
+    new Rule(this, 'ScheduleRule', {
+      schedule: Schedule.rate(cdk.Duration.minutes(5)),
+      targets: [new LambdaFunction(insertFunction)],
+    });
 
     // Outputs
     new cdk.CfnOutput(this, "TableArn", {
